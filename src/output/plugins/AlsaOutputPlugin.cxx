@@ -128,6 +128,7 @@ class AlsaOutput final
 	const int mode;
 
 	std::forward_list<Alsa::AllowedFormat> allowed_formats;
+	bool integer_upsampling;
 
 	/**
 	 * Protects #dop_setting and #allowed_formats.
@@ -249,6 +250,8 @@ class AlsaOutput final
 	Cond cond;
 
 	std::exception_ptr error;
+
+	const Alsa::AllowedFormat & BestMatch(const AudioFormat &needle) const;
 
 public:
 	AlsaOutput(EventLoop &loop, const ConfigBlock &block);
@@ -455,6 +458,7 @@ AlsaOutput::AlsaOutput(EventLoop &_loop, const ConfigBlock &block)
 	 period_time(block.GetPositiveValue("period_time", 0U)),
 	 mode(GetAlsaOpenMode(block))
 {
+	integer_upsampling = block.GetBlockValue("integer_upsampling", false);
 	const char *allowed_formats_string =
 		block.GetBlockValue("allowed_formats", nullptr);
 	if (allowed_formats_string != nullptr)
@@ -678,17 +682,33 @@ MaybeDmix(snd_pcm_t *pcm) noexcept
 	return MaybeDmix(snd_pcm_type(pcm));
 }
 
-static const Alsa::AllowedFormat &
-BestMatch(const std::forward_list<Alsa::AllowedFormat> &haystack,
-	  const AudioFormat &needle)
+static bool
+compatible(const AudioFormat &needle, const Alsa::AllowedFormat &allowed)
 {
-	assert(!haystack.empty());
+	return
+		(allowed.format.sample_rate % needle.sample_rate) == 0  &&
+		(allowed.format.format >= needle.format);
+}
 
-	for (const auto &i : haystack)
+const Alsa::AllowedFormat &
+AlsaOutput::BestMatch(const AudioFormat &needle) const {
+	assert(!allowed_formats.empty());
+
+	if (this->integer_upsampling && !(needle.format == SampleFormat::DSD) && (needle.sample_rate > 0)) {
+		for (const auto &current_allowed : allowed_formats) {
+			if (current_allowed.format.sample_rate > 0) {
+				if (compatible(needle, current_allowed)) {
+					return current_allowed;
+				}
+			}
+		}
+	}
+
+	for (const auto &i : allowed_formats)
 		if (needle.MatchMask(i.format))
 			return i;
 
-	return haystack.front();
+	return allowed_formats.front();
 }
 
 #ifdef ENABLE_DSD
@@ -796,8 +816,7 @@ AlsaOutput::Open(AudioFormat &audio_format)
 #endif
 
 		if (!allowed_formats.empty()) {
-			const auto &a = BestMatch(allowed_formats,
-						  audio_format);
+			const auto &a = BestMatch(audio_format);
 			audio_format.ApplyMask(a.format);
 #ifdef ENABLE_DSD
 			dop = a.dop;
