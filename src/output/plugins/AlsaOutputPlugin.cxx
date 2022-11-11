@@ -687,7 +687,8 @@ compatible(const AudioFormat &needle, const Alsa::AllowedFormat &allowed)
 {
 	return
 		(allowed.format.sample_rate % needle.sample_rate) == 0  &&
-		(allowed.format.format >= needle.format);
+		(allowed.format.format == SampleFormat::UNDEFINED || allowed.format.format >= needle.format) &&
+		(allowed.format.channels == 0 || allowed.format.channels >= needle.channels);
 }
 
 const Alsa::AllowedFormat &
