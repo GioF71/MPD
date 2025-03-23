@@ -66,6 +66,8 @@ class AlsaOutput final
 	const std::string device;
 
 	std::forward_list<Alsa::AllowedFormat> allowed_formats;
+	bool integer_upsampling;
+	std::forward_list<Alsa::AllowedFormat> integer_upsampling_allowed;
 
 	/**
 	 * Protects #dop_setting and #allowed_formats.
@@ -232,7 +234,9 @@ class AlsaOutput final
 
 	std::atomic_bool paused;
 
-public:
+	const Alsa::AllowedFormat & BestMatch(const AudioFormat &needle) const;
+
+    public:
 	AlsaOutput(EventLoop &loop, const ConfigBlock &block);
 
 	~AlsaOutput() noexcept override {
@@ -444,10 +448,16 @@ AlsaOutput::AlsaOutput(EventLoop &_loop, const ConfigBlock &block)
 #endif
 	close_on_pause(block.GetBlockValue("close_on_pause", true))
 {
+	integer_upsampling = block.GetBlockValue("integer_upsampling", false);
 	const char *allowed_formats_string =
 		block.GetBlockValue("allowed_formats", nullptr);
 	if (allowed_formats_string != nullptr)
 		allowed_formats = Alsa::AllowedFormat::ParseList(allowed_formats_string);
+
+    const char *integer_upsampling_allowed_string =
+		block.GetBlockValue("integer_upsampling_allowed", nullptr);
+	if (integer_upsampling_allowed_string != nullptr)
+		integer_upsampling_allowed = Alsa::AllowedFormat::ParseList(integer_upsampling_allowed_string);
 }
 
 std::map<std::string, std::string, std::less<>>
@@ -656,17 +666,40 @@ AlsaOutput::SetupOrDop(AudioFormat &audio_format, PcmExport::Params &params
 #endif
 }
 
-static const Alsa::AllowedFormat &
-BestMatch(const std::forward_list<Alsa::AllowedFormat> &haystack,
-	  const AudioFormat &needle)
+static bool
+compatible(const AudioFormat &needle, const Alsa::AllowedFormat &allowed)
 {
-	assert(!haystack.empty());
+	return
+		(allowed.format.sample_rate % needle.sample_rate) == 0  &&
+		(allowed.format.format == SampleFormat::UNDEFINED || allowed.format.format >= needle.format) &&
+		(allowed.format.channels == 0 || allowed.format.channels >= needle.channels);
+}
 
-	for (const auto &i : haystack)
+static bool
+frequency_match(const AudioFormat &needle, const Alsa::AllowedFormat &allowed)
+{
+	return allowed.format.sample_rate == needle.sample_rate;
+}
+
+const Alsa::AllowedFormat &
+AlsaOutput::BestMatch(const AudioFormat &needle) const {
+	assert(!allowed_formats.empty());
+
+	if (this->integer_upsampling && !(needle.format == SampleFormat::DSD) && (needle.sample_rate > 0)) {
+			for (const auto &current_allowed : allowed_formats) {
+				if (current_allowed.format.sample_rate > 0) {
+					if (compatible(needle, current_allowed)) {
+						return current_allowed;
+				}
+			}
+		}
+	}
+
+	for (const auto &i : allowed_formats)
 		if (needle.MatchMask(i.format))
 			return i;
 
-	return haystack.front();
+	return allowed_formats.front();
 }
 
 #ifdef ENABLE_DSD
@@ -775,11 +808,22 @@ AlsaOutput::Open(AudioFormat &audio_format)
 		dop = dop_setting;
 #endif
 
-		if (!allowed_formats.empty()) {
-			const auto &a = BestMatch(allowed_formats,
-						  audio_format);
-			audio_format.ApplyMask(a.format);
-#ifdef ENABLE_DSD
+    bool allow_best_match = true;
+    if (this->integer_upsampling && !this->integer_upsampling_allowed.empty()) {
+        allow_best_match = false; //unless allowed
+        for (const auto &current_allowed : this->integer_upsampling_allowed) {
+            if (!allow_best_match) {
+                if (frequency_match(audio_format, current_allowed)) {
+                    allow_best_match = true;
+                }
+            }
+        }
+    }
+    if (allow_best_match && !allowed_formats.empty()) {
+        const auto &a = BestMatch(audio_format);
+        audio_format.ApplyMask(a.format);
+
+        #ifdef ENABLE_DSD
 			dop = a.dop;
 #endif
 		}
