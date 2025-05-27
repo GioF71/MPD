@@ -1,7 +1,7 @@
 project(
   'mpd',
   ['c', 'cpp'],
-  version: '0.24.3',
+  version: '0.24.4',
   meson_version: '>= 1.0',
   default_options: [
     'c_std=c11',
@@ -14,6 +14,7 @@ project(
 
     # If we build those libraries as Meson subproject, they shall be
     # linked statically into the MPD executable.
+    'default_library=static',
     'curl:default_library=static',
     'expat:default_library=static',
     'flac:default_library=static',
@@ -90,6 +91,7 @@ project(
     'lame:tools=disabled',
     'libmpdclient:documentation=false',
     'libmpdclient:test=false',
+    'libsndfile:examples=false',
     'libsndfile:external_libs=disabled',
     'libsndfile:mpeg=disabled',
     'libsndfile:programs=false',
