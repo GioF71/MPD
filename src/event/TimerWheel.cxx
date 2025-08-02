@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: BSD-2-Clause
 // Copyright CM4all GmbH
-// author: Max Kellermann <mk@cm4all.com>
+// author: Max Kellermann <max.kellermann@ionos.com>
 
 #include "TimerWheel.hxx"
 #include "CoarseTimerEvent.hxx"
@@ -21,8 +21,6 @@ void
 TimerWheel::Insert(CoarseTimerEvent &t,
 		   Event::TimePoint now) noexcept
 {
-	assert(now >= last_time);
-
 	auto &list = t.GetDue() > now
 		? buckets[BucketIndexAt(t.GetDue())]
 		/* if this timer is already due, insert it into the

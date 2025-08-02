@@ -1,7 +1,7 @@
 project(
   'mpd',
   ['c', 'cpp'],
-  version: '0.24.4',
+  version: '0.24.5',
   meson_version: '>= 1.0',
   default_options: [
     'c_std=c11',
@@ -11,6 +11,7 @@ project(
     'warning_level=3',
 
     'fmt:cpp_std=c++20',
+    'gtest:cpp_std=c++20',
 
     # If we build those libraries as Meson subproject, they shall be
     # linked statically into the MPD executable.
