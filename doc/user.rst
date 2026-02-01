@@ -66,7 +66,7 @@ Each plugin usually needs a codec library, which you also need to
 install. Check the :doc:`plugins` for details about required libraries
 
 For example, the following installs a fairly complete list of build
-dependencies on Debian Bookworm:
+dependencies on Debian Trixie:
 
 .. code-block:: none
 
@@ -243,57 +243,22 @@ Configuration
 The Configuration File
 ----------------------
 
-:program:`MPD` reads its configuration from a text file. Usually, that is :file:`/etc/mpd.conf`, unless a different path is specified on the command line. If you run :program:`MPD` as a user daemon (and not as a system daemon), the configuration is read from :file:`$XDG_CONFIG_HOME/mpd/mpd.conf` (usually :file:`~/.config/mpd/mpd.conf`). On Android, :file:`mpd.conf` will be loaded from the top-level directory of the data partition.
-
-Each line in the configuration file contains a setting name and its value, e.g.:
-
-:code:`connection_timeout "5"`
-
-Lines starting with ``#`` are treated as comments and ignored.
-
-For settings that specify a file system path, the tilde ('~') is expanded to $HOME. In addition, the following path expansions are supported:
-
-- `$HOME`
-- `$XDG_CONFIG_HOME`
-- `$XDG_MUSIC_DIR`
-- `$XDG_CACHE_HOME`
-- `$XDG_RUNTIME_DIR`
-
-:code:`music_directory "~/Music"`
-
-:code:`db_file "$XDG_CONFIG_HOME/mpd/database"`
-
-Some of the settings are grouped in blocks with curly braces, e.g. per-plugin settings:
-
-.. code-block:: none
-
-    audio_output {
-        type "alsa"
-        name "My ALSA output"
-        device "iec958:CARD=Intel,DEV=0"
-        mixer_control "PCM"
-    }
-
-The :code:`include` directive can be used to include settings from
-another file; the given file name is relative to the current file:
-
-.. code-block:: none
-
-  include "other.conf"
-
-You can use :code:`include_optional` instead if you want the included file
-to be optional; the directive will be ignored if the file does not exist:
-
-.. code-block:: none
-
-  include_optional "may_not_exist.conf"
+The :ref:`mpd.conf manpage <manpage_mpdconf>` contains general
+information about the :program:`MPD` configuration file.
 
 Configuring the music directory
 -------------------------------
 
-When you play local files, you should organize them within a directory called the "music directory". This is configured in :program:`MPD` with the music_directory setting.
+When you play local files, you should organize them within a directory
+called the "music directory". This is configured in :program:`MPD`
+with the :confval:`music_directory` setting.
 
-By default, :program:`MPD` follows symbolic links in the music directory. This behavior can be switched off: :code:`follow_outside_symlinks` controls whether :program:`MPD` follows links pointing to files outside of the music directory, and :code:`follow_inside_symlinks` lets you disable symlinks to files inside the music directory.
+By default, :program:`MPD` follows symbolic links in the music
+directory. This behavior can be switched off:
+:confval:`follow_outside_symlinks` controls whether :program:`MPD`
+follows links pointing to files outside of the music directory, and
+:confval:`follow_inside_symlinks` lets you disable symlinks to files
+inside the music directory.
 
 Instead of using local files, you can use storage plugins to access
 files on a remote file server. For example, to use music from the
@@ -822,7 +787,7 @@ address::
  bind_to_address "@mpd"
 
 If no port is specified, the default port is 6600.  This default can
-be changed with the port setting::
+be changed with the :confval:`port` setting::
 
  port "6601"
 
@@ -1018,7 +983,14 @@ One approach for optimization is running :program:`MPD` on the file server, whic
         host "fileserver.local"
     }
       
-The :code:`music_directory` setting tells :program:`MPD` to read files from the given NFS server. It does this by connecting to the server from userspace. This does not actually mount the file server into the kernel's virtual file system, and thus requires no kernel cooperation and no special privileges. It does not even require a kernel with NFS support, only the nfs storage plugin (using the libnfs userspace library). The same can be done with SMB/CIFS using the smbclient storage plugin (using libsmbclient).
+The :confval:`music_directory` setting tells :program:`MPD` to read
+files from the given NFS server. It does this by connecting to the
+server from userspace. This does not actually mount the file server
+into the kernel's virtual file system, and thus requires no kernel
+cooperation and no special privileges. It does not even require a
+kernel with NFS support, only the nfs storage plugin (using the libnfs
+userspace library). The same can be done with SMB/CIFS using the
+smbclient storage plugin (using libsmbclient).
 
 The database setting tells :program:`MPD` to pass all database queries on to the :program:`MPD` instance running on the file server (using the proxy plugin).
 
@@ -1090,7 +1062,7 @@ simply type::
 This will start :program:`MPD` as a daemon process (which means it
 detaches from your terminal and continues to run in background).  To
 stop it, send ``SIGTERM`` to the process; if you have configured a
-``pid_file``, you can use the ``--kill`` option::
+:confval:`pid_file`, you can use the ``--kill`` option::
 
  mpd --kill
 
@@ -1226,7 +1198,10 @@ Mounting is only possible with the simple database plugin and a :code:`cache_dir
       # cache_directory "~/.mpd/cache"
     }
         
-This requires migrating from the old :code:`db_file` setting to a database section. The cache directory must exist, and :program:`MPD` will put one file per mount there, which will be reused when the same storage is used again later.
+This requires migrating from the old :confval:`db_file` setting to a
+database section. The cache directory must exist, and :program:`MPD`
+will put one file per mount there, which will be reused when the same
+storage is used again later.
 
 Metadata
 --------
@@ -1259,7 +1234,7 @@ Stored Playlists
 Stored playlists are some kind of secondary playlists which can be
 created, saved, edited and deleted by the client. They are addressed
 by their names.  Its contents can be loaded into the queue, to be
-played back.  The :code:`playlist_directory` setting specifies where
+played back.  The :confval:`playlist_directory` setting specifies where
 those playlists are stored.
 
 Advanced usage
@@ -1429,7 +1404,7 @@ Database
 I can't see my music in the MPD database
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-* Check your :code:`music_directory` setting. 
+* Check your :confval:`music_directory` setting. 
 * Does the MPD user have read permission on all music files, and read+execute permission on all music directories (and all of their parent directories)? 
 * Did you update the database? (mpc update) 
 * Did you enable all relevant decoder plugins at compile time? :command:`mpd --version` will tell you. 

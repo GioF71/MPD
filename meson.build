@@ -1,7 +1,7 @@
 project(
   'mpd',
   ['c', 'cpp'],
-  version: '0.24.6',
+  version: '0.24.8',
   meson_version: '>= 1.0',
   default_options: [
     'c_std=c11',
@@ -479,8 +479,9 @@ subdir('src/util')
 subdir('src/cmdline')
 subdir('src/time')
 subdir('src/lib/icu')
-subdir('src/fs')
 subdir('src/io')
+subdir('src/fs')
+subdir('src/io/fs')
 subdir('src/io/uring')
 subdir('src/system')
 subdir('src/system/linux')

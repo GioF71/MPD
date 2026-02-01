@@ -1,3 +1,19 @@
+ver 0.24.8 (2026/01/26)
+* input
+  - cdio_paranoia: fix parsing of absolute device paths (0.24 regression)
+* Linux:
+  - fix build with glibc 2.43
+  - fix build with liburing < 2.4
+
+ver 0.24.7 (2026/01/16)
+* decoder
+  - ffmpeg: allow seeking only if both AVFormatContext and InputStream allow it
+* playlist
+  - cue: strip UTF-8 byte order marker
+* Linux: disable the iowait state for io_uring
+* fix GCC 16 compiler warning
+* fix spurious linker failures
+
 ver 0.24.6 (2025/10/20)
 * decoder
   - ffmpeg: handle "*.opus" files
