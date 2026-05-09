@@ -1,3 +1,14 @@
+ver 0.24.10 (2026/05/06)
+* input
+  - cache: fix deadlock bug
+* decoder
+  - sidplay: support millisecond-precision time stamps
+  - sidplay: support libsidplayfp version 3
+* database
+  - upnp: allow building with libupnp 1.14.30 which has fixed the API breakage
+* Windows
+  - work around build failure due to zlib bug
+
 ver 0.24.9 (2026/03/11)
 * input
   - curl: fix build failure after CURL 8.19 API change

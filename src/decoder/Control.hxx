@@ -167,7 +167,7 @@ public:
 	 */
 	DecoderControl(Mutex &_mutex, Cond &_client_cond,
 		       InputCacheManager *_input_cache,
-		       const AudioFormat _configured_audio_format,
+		       AudioFormat _configured_audio_format,
 		       const ReplayGainConfig &_replay_gain_config) noexcept;
 	~DecoderControl() noexcept;
 
@@ -215,7 +215,7 @@ public:
 
 	[[gnu::pure]]
 	bool LockIsIdle() const noexcept {
-		const std::scoped_lock protect{mutex};
+		const std::lock_guard protect{mutex};
 		return IsIdle();
 	}
 
@@ -225,7 +225,7 @@ public:
 
 	[[gnu::pure]]
 	bool LockIsStarting() const noexcept {
-		const std::scoped_lock protect{mutex};
+		const std::lock_guard protect{mutex};
 		return IsStarting();
 	}
 
@@ -237,13 +237,13 @@ public:
 
 	[[gnu::pure]]
 	bool LockHasFailed() const noexcept {
-		const std::scoped_lock protect{mutex};
+		const std::lock_guard protect{mutex};
 		return HasFailed();
 	}
 
 	[[gnu::pure]]
 	bool LockIsReplayGainEnabled() const noexcept {
-		const std::scoped_lock protect{mutex};
+		const std::lock_guard protect{mutex};
 		return replay_gain_mode != ReplayGainMode::OFF;
 	}
 
@@ -257,25 +257,17 @@ public:
 		      bool _seekable, SignedSongTime _duration) noexcept;
 
 	/**
-	 * Checks whether an error has occurred, and if so, rethrows
+	 * Checks whether an error has occurred, and if so, returns
 	 * it.
 	 *
 	 * Caller must lock the object.
 	 */
-	void CheckRethrowError() const {
+	std::exception_ptr GetError() const noexcept {
 		assert(command == DecoderCommand::NONE);
-		assert(state != DecoderState::ERROR || error);
+		assert(state == DecoderState::ERROR);
+		assert(error);
 
-		if (state == DecoderState::ERROR)
-			std::rethrow_exception(error);
-	}
-
-	/**
-	 * Like CheckRethrowError(), but locks and unlocks the object.
-	 */
-	void LockCheckRethrowError() const {
-		const std::scoped_lock protect{mutex};
-		CheckRethrowError();
+		return error;
 	}
 
 	/**
@@ -350,7 +342,7 @@ private:
 	}
 
 	void LockAsynchronousCommand(DecoderCommand cmd) noexcept {
-		const std::scoped_lock protect{mutex};
+		const std::lock_guard protect{mutex};
 		command = cmd;
 		Signal();
 	}

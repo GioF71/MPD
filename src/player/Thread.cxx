@@ -15,7 +15,7 @@
  * thread and sends it commands.
  *
  * The player thread itself does not do any I/O.  It synchronizes with
- * other threads via #GMutex and #GCond objects, and passes
+ * other threads via #Mutex and #Cond objects, and passes
  * #MusicChunk instances around in #MusicPipe objects.
  */
 
@@ -32,12 +32,11 @@
 #include "tag/Tag.hxx"
 #include "util/Domain.hxx"
 #include "thread/Name.hxx"
+#include "thread/ScopeUnlock.hxx"
 #include "Log.hxx"
 
 #include <exception>
 #include <memory>
-
-#include <string.h>
 
 static constexpr Domain player_domain("player");
 
@@ -404,13 +403,11 @@ Player::StopDecoder(std::unique_lock<Mutex> &lock) noexcept
 	decoder_starting = false;
 }
 
-bool
+inline bool
 Player::ForwardDecoderError() noexcept
 {
-	try {
-		dc.CheckRethrowError();
-	} catch (...) {
-		pc.SetError(PlayerError::DECODER, std::current_exception());
+	if (dc.HasFailed()) {
+		pc.SetError(PlayerError::DECODER, dc.GetError());
 		return false;
 	}
 
@@ -550,7 +547,8 @@ Player::OpenOutput() noexcept
 		const ScopeUnlock unlock(pc.mutex);
 		pc.outputs.Open(play_audio_format);
 	} catch (...) {
-		LogError(std::current_exception());
+		auto error = std::current_exception();
+		LogError(error);
 
 		output_open = false;
 
@@ -558,7 +556,7 @@ Player::OpenOutput() noexcept
 		   audio output becomes available */
 		paused = true;
 
-		pc.SetOutputError(std::current_exception());
+		pc.SetOutputError(std::move(error));
 
 		return false;
 	}
@@ -585,7 +583,7 @@ Player::CheckDecoderStartup(std::unique_lock<Mutex> &lock) noexcept
 
 		if (output_open &&
 		    !pc.WaitOutputConsumed(lock, 1))
-			/* the output devices havn't finished playing
+			/* the output devices haven't finished playing
 			   all chunks yet - wait for that */
 			return true;
 
@@ -669,6 +667,7 @@ Player::SeekDecoder(std::unique_lock<Mutex> &lock, SongTime seek_time) noexcept
 inline bool
 Player::SeekDecoder(std::unique_lock<Mutex> &lock) noexcept
 {
+	assert(lock.mutex() == &pc.mutex);
 	assert(pc.next_song != nullptr);
 
 	if (pc.seek_time > SongTime::zero() && // TODO: allow this only if the song duration is known
@@ -687,7 +686,7 @@ Player::SeekDecoder(std::unique_lock<Mutex> &lock) noexcept
 	CancelPendingSeek();
 
 	{
-		const ScopeUnlock unlock(pc.mutex);
+		const ScopeUnlock unlock{lock};
 		pc.outputs.Cancel();
 	}
 
@@ -751,7 +750,7 @@ Player::SeekDecoder(std::unique_lock<Mutex> &lock) noexcept
 
 	{
 		/* call syncPlaylistWithQueue() in the main thread */
-		const ScopeUnlock unlock(pc.mutex);
+		const ScopeUnlock unlock{lock};
 		pc.listener.OnPlayerSync();
 	}
 
@@ -761,6 +760,8 @@ Player::SeekDecoder(std::unique_lock<Mutex> &lock) noexcept
 inline bool
 Player::ProcessCommand(std::unique_lock<Mutex> &lock) noexcept
 {
+	assert(lock.mutex() == &pc.mutex);
+
 	switch (pc.command) {
 	case PlayerCommand::NONE:
 		break;
@@ -772,7 +773,7 @@ Player::ProcessCommand(std::unique_lock<Mutex> &lock) noexcept
 
 	case PlayerCommand::UPDATE_AUDIO:
 		{
-			const ScopeUnlock unlock(pc.mutex);
+			const ScopeUnlock unlock{lock};
 			pc.outputs.EnableDisable();
 		}
 
@@ -798,7 +799,7 @@ Player::ProcessCommand(std::unique_lock<Mutex> &lock) noexcept
 		if (paused) {
 			pc.state = PlayerState::PAUSE;
 
-			const ScopeUnlock unlock(pc.mutex);
+			const ScopeUnlock unlock{lock};
 			pc.outputs.Pause();
 		} else if (!play_audio_format.IsDefined()) {
 			/* the decoder hasn't provided an audio format
@@ -833,13 +834,15 @@ Player::ProcessCommand(std::unique_lock<Mutex> &lock) noexcept
 
 	case PlayerCommand::REFRESH:
 		if (output_open && !paused) {
-			const ScopeUnlock unlock(pc.mutex);
+			const ScopeUnlock unlock{lock};
 			pc.outputs.CheckPipe();
 		}
 
-		pc.elapsed_time = !pc.outputs.GetElapsedTime().IsNegative()
-			? SongTime(pc.outputs.GetElapsedTime())
-			: elapsed_time;
+		if (const auto outputs_time = pc.outputs.GetElapsedTime();
+		    !outputs_time.IsNegative())
+			pc.elapsed_time = static_cast<SongTime>(outputs_time);
+		else
+			pc.elapsed_time = elapsed_time;
 
 		pc.CommandFinished();
 		break;
@@ -858,7 +861,6 @@ Player::CheckCrossFade() noexcept
 	if (pc.border_pause) {
 		/* no cross-fading if MPD is going to pause at the end
 		   of the current song */
-		xfade_state = CrossFadeState::UNKNOWN;
 		return;
 	}
 
@@ -866,8 +868,8 @@ Player::CheckCrossFade() noexcept
 		/* we need information about the next song before we
 		   can decide */
 		/* the "pipe.empty" check is here so we wait for all
-                   (ReplayGain/MixRamp) metadata to appear, which some
-                   decoders parse only after reporting readiness */
+		   (ReplayGain/MixRamp) metadata to appear, which some
+		   decoders parse only after reporting readiness */
 		return;
 
 	if (!pc.cross_fade.CanCrossFade(pc.total_time, dc.total_time,
@@ -933,7 +935,7 @@ PlayerControl::PlayChunk(DetachedSong &song, MusicChunkPtr chunk,
 		return;
 
 	{
-		const std::scoped_lock lock{mutex};
+		const std::lock_guard lock{mutex};
 		bit_rate = chunk->bit_rate;
 	}
 
@@ -986,7 +988,7 @@ Player::PlayNextChunk() noexcept
 						    std::move(other_chunk->tag));
 
 			if (pc.cross_fade.mixramp_delay <= FloatDuration::zero()) {
-				chunk->mix_ratio = ((float)cross_fade_position)
+				chunk->mix_ratio = static_cast<float>(cross_fade_position)
 					     / cross_fade_chunks;
 			} else {
 				chunk->mix_ratio = -1;
@@ -1042,7 +1044,8 @@ Player::PlayNextChunk() noexcept
 		pc.PlayChunk(*song, std::move(chunk),
 			     play_audio_format);
 	} catch (...) {
-		LogError(std::current_exception());
+		auto error = std::current_exception();
+		LogError(error);
 
 		chunk.reset();
 
@@ -1050,12 +1053,12 @@ Player::PlayNextChunk() noexcept
 		   audio output becomes available */
 		paused = true;
 
-		pc.LockSetOutputError(std::current_exception());
+		pc.LockSetOutputError(std::move(error));
 
 		return false;
 	}
 
-	const std::scoped_lock lock{pc.mutex};
+	const std::lock_guard lock{pc.mutex};
 
 	/* this formula should prevent that the decoder gets woken up
 	   with each chunk; it is more efficient to make it decode a
@@ -1164,7 +1167,7 @@ Player::Run() noexcept
 			/* at least one music chunk is ready - send it
 			   to the audio output */
 
-			const ScopeUnlock unlock(pc.mutex);
+			const ScopeUnlock unlock{lock};
 			PlayNextChunk();
 		} else if (UnlockCheckOutputs() > 0) {
 			/* not enough data from decoder, but the
@@ -1199,7 +1202,7 @@ Player::Run() noexcept
 			if (pipe->IsEmpty()) {
 				/* wait for the hardware to finish
 				   playback */
-				const ScopeUnlock unlock(pc.mutex);
+				const ScopeUnlock unlock{lock};
 				pc.outputs.Drain();
 				break;
 			}
@@ -1270,7 +1273,7 @@ try {
 			assert(next_song != nullptr);
 
 			{
-				const ScopeUnlock unlock(mutex);
+				const ScopeUnlock unlock{lock};
 				do_play(*this, dc, buffer);
 
 				/* give the main thread a chance to
@@ -1284,7 +1287,7 @@ try {
 
 		case PlayerCommand::STOP:
 			{
-				const ScopeUnlock unlock(mutex);
+				const ScopeUnlock unlock{lock};
 				outputs.Cancel();
 			}
 
@@ -1299,7 +1302,7 @@ try {
 
 		case PlayerCommand::CLOSE_AUDIO:
 			{
-				const ScopeUnlock unlock(mutex);
+				const ScopeUnlock unlock{lock};
 				outputs.Release();
 			}
 
@@ -1311,7 +1314,7 @@ try {
 
 		case PlayerCommand::UPDATE_AUDIO:
 			{
-				const ScopeUnlock unlock(mutex);
+				const ScopeUnlock unlock{lock};
 				outputs.EnableDisable();
 			}
 
@@ -1320,7 +1323,7 @@ try {
 
 		case PlayerCommand::EXIT:
 			{
-				const ScopeUnlock unlock(mutex);
+				const ScopeUnlock unlock{lock};
 				dc.Quit();
 				outputs.Close();
 			}

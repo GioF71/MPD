@@ -2,6 +2,7 @@
 // Copyright The Music Player Daemon Project
 
 #include "Stream.hxx"
+#include "thread/ScopeUnlock.hxx"
 
 CacheInputStream::CacheInputStream(InputCacheLease _lease,
 				   Mutex &_mutex) noexcept
@@ -20,7 +21,7 @@ CacheInputStream::Check()
 	const ScopeUnlock unlock(mutex);
 
 	auto &i = GetCacheItem();
-	const std::scoped_lock protect{i.mutex};
+	const std::lock_guard protect{i.mutex};
 
 	i.Check();
 }
@@ -44,7 +45,7 @@ CacheInputStream::IsAvailable() const noexcept
 	const ScopeUnlock unlock(mutex);
 
 	auto &i = GetCacheItem();
-	const std::scoped_lock protect{i.mutex};
+	const std::lock_guard protect{i.mutex};
 
 	return i.IsAvailable(_offset);
 }
@@ -59,10 +60,13 @@ CacheInputStream::Read(std::unique_lock<Mutex> &lock,
 	size_t nbytes;
 
 	{
-		const ScopeUnlock unlock(mutex);
-		const std::scoped_lock protect{i.mutex};
+		/* release our own #mutex (taken by the caller via
+		   #lock) and lock #InputCacheItem's mutex (from
+		   #BufferingInputStream) instead*/
+		const ScopeUnlock unlock{lock};
+		std::unique_lock cache_lock{i.mutex};
 
-		nbytes = i.Read(lock, _offset, dest);
+		nbytes = i.Read(cache_lock, _offset, dest);
 	}
 
 	offset += nbytes;
@@ -70,11 +74,12 @@ CacheInputStream::Read(std::unique_lock<Mutex> &lock,
 }
 
 void
-CacheInputStream::OnInputCacheAvailable() noexcept
+CacheInputStream::OnInputCacheAvailable(std::unique_lock<Mutex> &lock) noexcept
 {
-	auto &i = GetCacheItem();
-	const ScopeUnlock unlock(i.mutex);
+	assert(lock.mutex() == &GetCacheItem().mutex);
 
-	const std::scoped_lock protect{mutex};
+	const ScopeUnlock unlock{lock};
+
+	const std::lock_guard protect{mutex};
 	InvokeOnAvailable();
 }

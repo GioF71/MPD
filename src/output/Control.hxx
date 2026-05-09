@@ -442,7 +442,7 @@ public:
 	void EnableDisableAsync();
 
 	void LockEnableDisableAsync() {
-		const std::scoped_lock protect{mutex};
+		const std::lock_guard protect{mutex};
 		EnableDisableAsync();
 	}
 
@@ -481,7 +481,7 @@ public:
 	 * @param force true to ignore the #fail_timer
 	 * @return true if the device is open
 	 */
-	bool LockUpdate(const AudioFormat audio_format,
+	bool LockUpdate(AudioFormat audio_format,
 			const MusicPipe &mp,
 			bool force) noexcept;
 
@@ -517,7 +517,7 @@ public:
 	 * Locking wrapper for ClearTailChunk().
 	 */
 	void LockClearTailChunk(const MusicChunk &chunk) noexcept {
-		const std::scoped_lock lock{mutex};
+		const std::lock_guard lock{mutex};
 		ClearTailChunk(chunk);
 	}
 

@@ -43,7 +43,7 @@ public:
 	using BufferingInputStream::size;
 
 	bool IsInUse() const noexcept {
-		const std::scoped_lock lock{mutex};
+		const std::lock_guard lock{mutex};
 		return !leases.empty();
 	}
 
@@ -52,7 +52,7 @@ public:
 
 private:
 	/* virtual methods from class BufferingInputStream */
-	void OnBufferAvailable() noexcept override;
+	void OnBufferAvailable(std::unique_lock<Mutex> &lock) noexcept override;
 };
 
 #endif

@@ -21,14 +21,14 @@ InputCacheItem::~InputCacheItem() noexcept
 void
 InputCacheItem::AddLease(InputCacheLease &lease) noexcept
 {
-	const std::scoped_lock lock{mutex};
+	const std::lock_guard lock{mutex};
 	leases.push_back(lease);
 }
 
 void
 InputCacheItem::RemoveLease(InputCacheLease &lease) noexcept
 {
-	const std::scoped_lock lock{mutex};
+	const std::lock_guard lock{mutex};
 	auto i = leases.iterator_to(lease);
 	if (i == next_lease)
 		++next_lease;
@@ -38,10 +38,10 @@ InputCacheItem::RemoveLease(InputCacheLease &lease) noexcept
 }
 
 void
-InputCacheItem::OnBufferAvailable() noexcept
+InputCacheItem::OnBufferAvailable(std::unique_lock<Mutex> &lock) noexcept
 {
 	for (auto i = leases.begin(); i != leases.end(); i = next_lease) {
 		next_lease = std::next(i);
-		i->OnInputCacheAvailable();
+		i->OnInputCacheAvailable(lock);
 	}
 }
