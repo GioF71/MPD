@@ -8,7 +8,9 @@
 #include "ls.hxx"
 #include "storage/Registry.hxx"
 #include "util/ASCII.hxx"
+#include "util/StringCompare.hxx"
 #include "util/UriExtract.hxx"
+#include "util/UriUtil.hxx"
 
 #ifdef ENABLE_DATABASE
 #include "storage/StorageInterface.hxx"
@@ -86,11 +88,11 @@ LocateAbsoluteUri(UriPluginKind kind, const char *uri
 
 LocatedUri
 LocateUri(UriPluginKind kind,
-	  const char *uri, const IClient *client
+	  const char *uri, const IClient *client,
 #ifdef ENABLE_DATABASE
-	  , const Storage *storage
+	  const Storage *storage,
 #endif
-	  )
+	  bool allow_empty)
 {
 	/* skip the obsolete "file://" prefix */
 	const char *path_utf8 = StringAfterPrefixCaseASCII(uri, "file://");
@@ -115,6 +117,12 @@ LocateUri(UriPluginKind kind,
 					 , storage
 #endif
 					 );
-	else
+	else if (allow_empty && StringIsEmpty(uri))
 		return LocatedUri(LocatedUri::Type::RELATIVE, uri);
+	else {
+		if (!uri_safe_local(uri))
+			throw std::invalid_argument{"Bad relative path"};
+
+		return LocatedUri(LocatedUri::Type::RELATIVE, uri);
+	}
 }
