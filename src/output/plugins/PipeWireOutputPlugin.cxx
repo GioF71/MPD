@@ -593,8 +593,12 @@ PipeWireOutput::Open(AudioFormat &audio_format)
 							 PW_STREAM_FLAG_MAP_BUFFERS |
 							 PW_STREAM_FLAG_RT_PROCESS),
 				  params, 1);
-	if (error < 0)
+	if (error < 0) {
+		ring_buffer = {};
+		pw_stream_destroy(stream);
+		stream = nullptr;
 		throw PipeWire::MakeError(error, "Failed to connect stream");
+	}
 }
 
 void
@@ -924,6 +928,9 @@ PipeWireOutput::SendTag(const Tag &tag)
 		const char *pipewire;
 	} tag_map[] = {
 		{ TAG_ARTIST, PW_KEY_MEDIA_ARTIST },
+#ifdef PW_KEY_MEDIA_ALBUM
+		{ TAG_ALBUM, PW_KEY_MEDIA_ALBUM },
+#endif
 		{ TAG_TITLE, PW_KEY_MEDIA_TITLE },
 		{ TAG_DATE, PW_KEY_MEDIA_DATE },
 		{ TAG_COMMENT, PW_KEY_MEDIA_COMMENT },
