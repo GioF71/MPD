@@ -38,9 +38,12 @@ dsdlib_valid_freq(uint32_t samplefreq) noexcept;
 /**
  * Add tags from ID3 tag. All tags commonly found in the ID3 tags of
  * DSF and DSDIFF files are imported
+ *
+ * @return true on success (even if the ID3 tag was empty), false on
+ * error
  */
-void
-dsdlib_tag_id3(InputStream &is, TagHandler &handler,
-	       offset_type tagoffset);
+bool
+dsdlib_tag_id3(DecoderClient *client, InputStream &is,
+	       TagHandler &handler, offset_type tagoffset);
 
 #endif

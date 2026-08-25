@@ -1,8 +1,7 @@
 // SPDX-License-Identifier: BSD-2-Clause
 // author: Max Kellermann <max.kellermann@gmail.com>
 
-#ifndef APPLE_AUDIO_OBJECT_HXX
-#define APPLE_AUDIO_OBJECT_HXX
+#pragma once
 
 #include "Throw.hxx"
 #include "util/AllocatedArray.hxx"
@@ -47,6 +46,19 @@ AudioObjectGetPropertyDataT(AudioObjectID inObjectID,
 	return value;
 }
 
+template<typename T>
+void
+AudioObjectSetPropertyDataT(AudioObjectID inObjectID,
+			    const AudioObjectPropertyAddress &inAddress,
+			    const T &value)
+{
+	OSStatus status = AudioObjectSetPropertyData(inObjectID, &inAddress,
+						     0, nullptr,
+						     sizeof(value), &value);
+	if (status != noErr)
+		Apple::ThrowOSStatus(status);
+}
+
 Apple::StringRef
 AudioObjectGetStringProperty(AudioObjectID inObjectID,
 			     const AudioObjectPropertyAddress &inAddress);
@@ -75,5 +87,3 @@ AudioObjectGetPropertyDataArray(AudioObjectID inObjectID,
 
 	return result;
 }
-
-#endif

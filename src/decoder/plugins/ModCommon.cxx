@@ -46,7 +46,7 @@ mod_loadfile(const Domain *domain, DecoderClient *client, InputStream &is)
 				break;
 
 			/* I/O error - skip this song */
-			return buffer;
+			return nullptr;
 		}
 
 		p += ret;
@@ -55,7 +55,7 @@ mod_loadfile(const Domain *domain, DecoderClient *client, InputStream &is)
 				break;
 
 			LogWarning(*domain, "stream too large");
-			return buffer;
+			return nullptr;
 		}
 	}
 	

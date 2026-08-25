@@ -11,10 +11,13 @@
 #include "DsdLib.hxx"
 #include "../DecoderAPI.hxx"
 #include "input/InputStream.hxx"
-#include "tag/Id3Scan.hxx"
+#include "util/IntOverflow.hxx"
 
 #ifdef ENABLE_ID3TAG
-#include <id3tag.h>
+#include "tag/Id3Limits.hxx"
+#include "tag/Id3Parse.hxx"
+#include "tag/Id3Scan.hxx"
+#include "util/AllocatedArray.hxx"
 #endif
 
 #include <string.h>
@@ -39,6 +42,7 @@ dsdlib_skip_to(DecoderClient *client, InputStream &is,
 	if (is.IsSeekable()) {
 		try {
 			is.LockSeek(offset);
+			return true;
 		} catch (...) {
 			return false;
 		}
@@ -61,8 +65,13 @@ dsdlib_skip(DecoderClient *client, InputStream &is,
 		return true;
 
 	if (is.IsSeekable()) {
+		offset_type new_offset;
+		if (AddOverflow(is.GetOffset(), delta, new_offset))
+			return false;
+
 		try {
-			is.LockSeek(is.GetOffset() + delta);
+			is.LockSeek(new_offset);
+			return true;
 		} catch (...) {
 			return false;
 		}
@@ -96,44 +105,38 @@ dsdlib_valid_freq(uint32_t samplefreq) noexcept
 }
 
 #ifdef ENABLE_ID3TAG
-void
-dsdlib_tag_id3(InputStream &is, TagHandler &handler,
-	       offset_type tagoffset)
+bool
+dsdlib_tag_id3(DecoderClient *client, InputStream &is,
+	       TagHandler &handler, offset_type tagoffset)
 {
 	if (tagoffset == 0 || !is.KnownSize())
-		return;
+		return false;
 
 	/* Prevent broken files causing problems */
 	const auto size = is.GetSize();
 	if (tagoffset >= size)
-		return;
+		return false;
 
 	const auto count64 = size - tagoffset;
-	if (count64 < 10 || count64 > 4 * 1024 * 1024)
-		return;
+	if (count64 < 10 || count64 > MAX_ID3_TAG_SIZE)
+		return false;
 
-	if (!dsdlib_skip_to(nullptr, is, tagoffset))
-		return;
+	if (!dsdlib_skip_to(client, is, tagoffset))
+		return false;
 
 	const id3_length_t count = count64;
 
-	auto *const id3_buf = new id3_byte_t[count];
-	if (id3_buf == nullptr)
-		return;
+	AllocatedArray<std::byte> id3_buf{count};
 
-	if (!decoder_read_full(nullptr, is,
-			       {reinterpret_cast<std::byte *>(id3_buf), count})) {
-		delete[] id3_buf;
-		return;
-	}
+	if (!decoder_read_full(client, is, id3_buf))
+		return false;
 
-	struct id3_tag *id3_tag = id3_tag_parse(id3_buf, count);
-	delete[] id3_buf;
+	const auto id3_tag = id3_tag_parse(id3_buf);
+	id3_buf = nullptr;
 	if (id3_tag == nullptr)
-		return;
+		return false;
 
-	scan_id3_tag(id3_tag, handler);
-
-	id3_tag_delete(id3_tag);
+	scan_id3_tag(id3_tag.get(), handler);
+	return true;
 }
 #endif

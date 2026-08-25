@@ -331,7 +331,7 @@ dsf_scan_stream(InputStream &is, TagHandler &handler)
 
 #ifdef ENABLE_ID3TAG
 	/* Add available tags from the ID3 tag */
-	dsdlib_tag_id3(is, handler, metadata.id3_offset);
+	dsdlib_tag_id3(nullptr, is, handler, metadata.id3_offset);
 #endif
 	return true;
 }

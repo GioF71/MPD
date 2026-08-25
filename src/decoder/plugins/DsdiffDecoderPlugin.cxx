@@ -16,6 +16,7 @@
 #include "input/InputStream.hxx"
 #include "pcm/CheckAudioFormat.hxx"
 #include "util/BitReverse.hxx"
+#include "util/IntOverflow.hxx"
 #include "util/PackedBigEndian.hxx"
 #include "util/SpanCast.hxx"
 #include "tag/Handler.hxx"
@@ -61,6 +62,11 @@ struct DsdiffMetaData {
 	unsigned sample_rate, channels;
 	bool bitreverse;
 	offset_type chunk_size;
+
+	AudioFormat ToAudioFormat() const {
+		return CheckAudioFormat(sample_rate / 8, SampleFormat::DSD, channels);
+	}
+
 };
 
 static bool lsbitfirst;
@@ -86,6 +92,9 @@ dsdiff_read_chunk_header(DecoderClient *client, InputStream &is,
 	return decoder_read_full(client, is, ReferenceAsWritableBytes(header));
 }
 
+/**
+ * Read a payload that must be exactly the size of the specified span.
+ */
 static bool
 dsdiff_read_payload(DecoderClient *client, InputStream &is,
 		    const DsdiffChunkHeader &header,
@@ -99,16 +108,37 @@ dsdiff_read_payload(DecoderClient *client, InputStream &is,
 }
 
 /**
+ * Read a payload that must be at least the size of the specified
+ * span.
+ */
+static bool
+dsdiff_read_partial_payload(DecoderClient *client, InputStream &is,
+			    const DsdiffChunkHeader &header,
+			    std::span<std::byte> dest)
+{
+	return header.GetSize() >= dest.size() &&
+		decoder_read_full(client, is, dest) &&
+		dsdlib_skip(client, is, header.GetPaddedSize() - dest.size());
+}
+
+/**
  * Read and parse a "SND" chunk inside "PROP".
  */
 static bool
 dsdiff_read_prop_snd(DecoderClient *client, InputStream &is,
 		     DsdiffMetaData &metadata,
-		     offset_type end_offset)
+		     const offset_type prop_size,
+		     const offset_type end_offset)
 {
 	DsdiffChunkHeader header;
 	while (is.GetOffset() + sizeof(header) <= end_offset) {
 		if (!dsdiff_read_chunk_header(client, is, header))
+			return false;
+
+		/* by disallowing sub-chunks larger than the parent
+		   "PROP" chunk, follow-up integer overflows are
+		   avoided */
+		if (header.GetSize() > prop_size)
 			return false;
 
 		offset_type chunk_end_offset = is.GetOffset()
@@ -125,19 +155,15 @@ dsdiff_read_prop_snd(DecoderClient *client, InputStream &is,
 			metadata.sample_rate = FromBE32(sample_rate);
 		} else if (header.id.Equals("CHNL")) {
 			uint16_t channels;
-			if (header.GetSize() < sizeof(channels) ||
-			    !decoder_read_full(client, is,
-					       ReferenceAsWritableBytes(channels)) ||
-			    !dsdlib_skip_to(client, is, chunk_end_offset))
+			if (!dsdiff_read_partial_payload(client, is, header,
+							 ReferenceAsWritableBytes(channels)))
 				return false;
 
 			metadata.channels = FromBE16(channels);
 		} else if (header.id.Equals("CMPR")) {
 			DsdId type;
-			if (header.GetSize() < sizeof(type) ||
-			    !decoder_read_full(client, is,
-					       ReferenceAsWritableBytes(type)) ||
-			    !dsdlib_skip_to(client, is, chunk_end_offset))
+			if (!dsdiff_read_partial_payload(client, is, header,
+							 ReferenceAsWritableBytes(type)))
 				return false;
 
 			if (!type.Equals("DSD "))
@@ -161,18 +187,16 @@ dsdiff_read_prop_snd(DecoderClient *client, InputStream &is,
 static bool
 dsdiff_read_prop(DecoderClient *client, InputStream &is,
 		 DsdiffMetaData &metadata,
-		 const DsdiffChunkHeader &prop_header)
+		 const offset_type prop_size,
+		 const offset_type end_offset)
 {
-	uint64_t prop_size = prop_header.GetSize();
-	const offset_type end_offset = is.GetOffset() + prop_size;
-
 	DsdId prop_id;
 	if (prop_size < sizeof(prop_id) ||
 	    !dsdiff_read_id(client, is, prop_id))
 		return false;
 
 	if (prop_id.Equals("SND "))
-		return dsdiff_read_prop_snd(client, is, metadata, end_offset);
+		return dsdiff_read_prop_snd(client, is, metadata, prop_size, end_offset);
 	else
 		/* ignore unknown PROP chunk */
 		return dsdlib_skip_to(client, is, end_offset);
@@ -279,8 +303,8 @@ dsdiff_read_metadata_extra(DecoderClient *client, InputStream &is,
 	if (id3_offset != 0) {
 		/* a ID3 tag has preference over the other tags, do not process
 		   other tags if we have one */
-		dsdlib_tag_id3(is, handler, id3_offset);
-		return true;
+		if (dsdlib_tag_id3(client, is, handler, id3_offset))
+			return true;
 	}
 #endif
 
@@ -315,20 +339,20 @@ dsdiff_read_metadata(DecoderClient *client, InputStream &is,
 					      chunk_header))
 			return false;
 
+		const offset_type chunk_size = chunk_header.GetSize();
+		offset_type chunk_end_offset;
+		if (AddOverflow(is.GetOffset(), chunk_size, chunk_end_offset))
+			return false;
+
 		if (chunk_header.id.Equals("PROP")) {
 			if (!dsdiff_read_prop(client, is, metadata,
-					      chunk_header))
+					      chunk_size, chunk_end_offset))
 					return false;
 		} else if (chunk_header.id.Equals("DSD ")) {
-			const offset_type chunk_size = chunk_header.GetSize();
 			metadata.chunk_size = chunk_size;
 			return true;
 		} else {
 			/* ignore unknown chunk */
-			const offset_type chunk_size = chunk_header.GetSize();
-			const offset_type chunk_end_offset =
-				is.GetOffset() + chunk_size;
-
 			if (!dsdlib_skip_to(client, is, chunk_end_offset))
 				return false;
 		}
@@ -420,9 +444,7 @@ dsdiff_stream_decode(DecoderClient &client, InputStream &is)
 	if (!dsdiff_read_metadata(&client, is, metadata, chunk_header))
 		return;
 
-	auto audio_format = CheckAudioFormat(metadata.sample_rate / 8,
-					     SampleFormat::DSD,
-					     metadata.channels);
+	const auto audio_format = metadata.ToAudioFormat();
 
 	/* calculate song time from DSD chunk size and sample frequency */
 	offset_type chunk_size = metadata.chunk_size;
@@ -453,15 +475,13 @@ dsdiff_scan_stream(InputStream &is, TagHandler &handler)
 	if (!dsdiff_read_metadata(nullptr, is, metadata, chunk_header))
 		return false;
 
-	const auto sample_rate = metadata.sample_rate / 8;
-	if (!audio_valid_sample_rate(sample_rate) ||
-	    !audio_valid_channel_count(metadata.channels))
-		return false;
+	const auto audio_format = metadata.ToAudioFormat();
+	handler.OnAudioFormat(audio_format);
 
 	/* calculate song time and add as tag */
 	uint64_t n_frames = metadata.chunk_size / metadata.channels;
 	auto songtime = SongTime::FromScale<uint64_t>(n_frames,
-						      sample_rate);
+						      audio_format.sample_rate);
 	handler.OnDuration(songtime);
 
 	/* Read additional metadata and created tags if available */

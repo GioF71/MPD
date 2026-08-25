@@ -3,8 +3,9 @@ if not is_darwin
   subdir_done()
 endif
 
-audiounit_dep = declare_dependency(
-  link_args: ['-framework', 'AudioUnit', '-framework', 'CoreAudio', '-framework', 'CoreServices'],
+audiounit_dep = dependency(
+  'appleframeworks',
+  modules: ['AudioToolbox', 'AudioUnit', 'CoreAudio', 'CoreFoundation'],
 )
 
 apple = static_library(
@@ -14,6 +15,7 @@ apple = static_library(
   include_directories: inc,
   dependencies: [
     audiounit_dep,
+    fmt_dep,
   ],
 )
 

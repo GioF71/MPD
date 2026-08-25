@@ -12,6 +12,8 @@
 
 #include <fmt/format.h>
 
+using std::string_view_literals::operator""sv;
+
 void
 printAudioDevices(Response &r, const MultipleOutputs &outputs)
 {
@@ -24,7 +26,7 @@ printAudioDevices(Response &r, const MultipleOutputs &outputs)
 		       "outputenabled: {}\n",
 		      i,
 		      ao.GetName(), ao.GetPluginName(),
-		      (unsigned)ao.IsEnabled());
+		      ao.IsEnabled() ? "1"sv : "0"sv);
 
 		for (const auto &[attribute, value] : ao.GetAttributes())
 			r.Fmt("attribute: {}={}\n",
