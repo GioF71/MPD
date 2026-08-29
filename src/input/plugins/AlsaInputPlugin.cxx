@@ -244,6 +244,7 @@ try {
 	CommitWriteBuffer(nbytes);
 }
 catch (...) {
+	const std::lock_guard protect{mutex};
 	postponed_exception = std::current_exception();
 	InvokeOnAvailable();
 }

@@ -8,6 +8,7 @@
 #include "Error.hxx"
 #include "lib/curl/Global.hxx"
 #include "lib/curl/Handler.hxx"
+#include "lib/curl/HttpStatusError.hxx"
 #include "lib/curl/Request.hxx"
 #include "event/Call.hxx"
 #include "event/InjectEvent.hxx"
@@ -104,10 +105,9 @@ void
 UPnPDeviceDirectory::Downloader::OnHeaders(unsigned status,
 					   Curl::Headers &&)
 {
-	if (status != 200) {
-		Destroy();
-		return;
-	}
+	if (status != 200)
+		throw HttpStatusError(status,
+				      "Failed to download UPnP device description");
 }
 
 void

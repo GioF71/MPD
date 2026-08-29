@@ -2,6 +2,7 @@
 // Copyright The Music Player Daemon Project
 
 #include "AsxPlaylistPlugin.hxx"
+#include "XmlPlaylistPlugin.hxx"
 #include "../PlaylistPlugin.hxx"
 #include "../MemorySongEnumerator.hxx"
 #include "protocol/Verify.hxx"
@@ -150,7 +151,7 @@ asx_open_stream(InputStreamPtr &&is)
 		ExpatParser expat(&parser);
 		expat.SetElementHandler(asx_start_element, asx_end_element);
 		expat.SetCharacterDataHandler(asx_char_data);
-		expat.Parse(*is);
+		expat.Parse(*is, XML_PLAYLIST_MAX_SIZE);
 	}
 
 	parser.songs.reverse();

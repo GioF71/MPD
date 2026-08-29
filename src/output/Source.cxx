@@ -185,13 +185,22 @@ AudioOutputSource::FilterChunk(const MusicChunk &chunk)
 			   case */
 			mix_ratio = 1.0f - mix_ratio;
 
+		/* use the post-replay-gain format for mixing;
+		   the ReplayGainFilter may convert the sample
+		   format (e.g. S16 to S24_P32 when software
+		   volume is enabled) */
+		const SampleFormat cross_fade_format =
+			replay_gain_filter
+			? replay_gain_filter->GetOutAudioFormat().format
+			: in_audio_format.format;
+
 		void *dest = cross_fade_buffer.Get(other_data.size());
 		memcpy(dest, other_data.data(), other_data.size());
 		if (!pcm_mix(cross_fade_dither, dest, data.data(), data.size(),
-			     in_audio_format.format,
+			     cross_fade_format,
 			     mix_ratio))
 			throw FmtRuntimeError("Cannot cross-fade format {}",
-					      in_audio_format.format);
+					      cross_fade_format);
 
 		data = {(const std::byte *)dest, other_data.size()};
 	}

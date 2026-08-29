@@ -2,6 +2,7 @@
 // Copyright The Music Player Daemon Project
 
 #include "RssPlaylistPlugin.hxx"
+#include "XmlPlaylistPlugin.hxx"
 #include "../PlaylistPlugin.hxx"
 #include "../MemorySongEnumerator.hxx"
 #include "tag/Builder.hxx"
@@ -130,7 +131,7 @@ rss_open_stream(InputStreamPtr &&is)
 		ExpatParser expat(&parser);
 		expat.SetElementHandler(rss_start_element, rss_end_element);
 		expat.SetCharacterDataHandler(rss_char_data);
-		expat.Parse(*is);
+		expat.Parse(*is, XML_PLAYLIST_MAX_SIZE);
 	}
 
 	parser.songs.reverse();

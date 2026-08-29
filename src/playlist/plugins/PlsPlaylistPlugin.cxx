@@ -4,6 +4,7 @@
 #include "PlsPlaylistPlugin.hxx"
 #include "../PlaylistPlugin.hxx"
 #include "../MemorySongEnumerator.hxx"
+#include "input/LimitedInputStream.hxx"
 #include "input/TextInputStream.hxx"
 #include "input/InputStream.hxx"
 #include "song/DetachedSong.hxx"
@@ -18,6 +19,9 @@
 #include <string>
 
 using std::string_view_literals::operator""sv;
+
+/* PLS playlists are materialized before any songs are returned. */
+static constexpr offset_type PLS_PLAYLIST_MAX_SIZE = 16 * 1024 * 1024;
 
 static bool
 FindPlaylistSection(TextInputStream &is)
@@ -133,7 +137,9 @@ ParsePls(TextInputStream &is, std::forward_list<DetachedSong> &songs)
 static bool
 ParsePls(InputStreamPtr &&is, std::forward_list<DetachedSong> &songs)
 {
-	TextInputStream tis(std::move(is));
+	InputStreamPtr limited = std::make_unique<LimitedInputStream>
+		(std::move(is), PLS_PLAYLIST_MAX_SIZE);
+	TextInputStream tis(std::move(limited));
 	if (!ParsePls(tis, songs)) {
 		is = tis.StealInputStream();
 		return false;

@@ -73,6 +73,8 @@ class AndroidNdkToolchain:
         llvm_path = os.path.join(ndk_path, 'toolchains', 'llvm', 'prebuilt', build_arch())
         llvm_triple = host_triplet + android_api_level
 
+        self.sysroot = os.path.join(llvm_path, 'sysroot')
+
         common_flags = '-Os -g'
         common_flags += ' ' + abi_info['cflags']
 

@@ -64,14 +64,18 @@ uri_apply_base(std::string_view uri, std::string_view base) noexcept
 	return out;
 }
 
-static void
-ClearFilename(std::string_view &path) noexcept
+/**
+ * Return the URI path without the last segment (but leave the
+ * trailing slash).
+ */
+static constexpr std::string_view
+UriPathWithoutFilename(std::string_view path) noexcept
 {
 	const auto slash = path.rfind('/');
 	if (slash != path.npos)
-		path = path.substr(0, slash + 1);
+		return path.substr(0, slash + 1);
 	else
-		path = path.substr(0, 0);
+		return path.substr(0, 0);
 }
 
 static void
@@ -81,20 +85,19 @@ StripLeadingSlashes(std::string_view &s) noexcept
 		s.remove_prefix(1);
 }
 
-static bool
-ConsumeLastSegment(std::string_view &path) noexcept
+/**
+ * Return the URI path (ending with a slash) without the last segment
+ * (still ending with a slash).  May return an empty string no slash
+ * remains.
+ */
+static constexpr std::string_view
+UriPathWithoutLastSegment(std::string_view path) noexcept
 {
 	assert(!path.empty());
 	assert(path.back() == '/');
 
 	path.remove_suffix(1);
-
-	const auto slash = path.rfind('/');
-	if (slash == path.npos)
-		return false;
-
-	path = path.substr(0, slash + 1);
-	return true;
+	return UriPathWithoutFilename(path);
 }
 
 static bool
@@ -106,8 +109,17 @@ ConsumeSpecial(std::string_view &relative_path, std::string_view &base_path) noe
 		} else if (SkipPrefix(relative_path, "../"sv)) {
 			StripLeadingSlashes(relative_path);
 
-			if (!ConsumeLastSegment(base_path))
+			if (base_path.size() <= 1)
+				/* base_path is either already empty
+				   or consists of a single slash: we
+				   can't strip the last segment,
+				   therefore fail */
 				return false;
+
+			base_path = UriPathWithoutLastSegment(base_path);
+
+			/* if base_path did not start with a slash, it
+			   may now be empty */
 		} else if (relative_path == "."sv) {
 			relative_path.remove_prefix(1);
 			return true;
@@ -161,8 +173,7 @@ uri_apply_relative(std::string_view relative_uri,
 		return result;
 	}
 
-	std::string_view base_path(_base_path);
-	ClearFilename(base_path);
+	std::string_view base_path = UriPathWithoutFilename(_base_path);
 
 	if (!ConsumeSpecial(relative_path, base_path))
 		return {};

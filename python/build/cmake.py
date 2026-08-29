@@ -62,6 +62,18 @@ set(CMAKE_FIND_ROOT_PATH "{toolchain.install_prefix}")
 set(CMAKE_FIND_ROOT_PATH_MODE_LIBRARY ONLY)
 set(CMAKE_FIND_ROOT_PATH_MODE_INCLUDE ONLY)
 """)
+    elif toolchain.is_android:
+            # search libraries and headers only in the sysroot, not on
+            # the build host
+            f.write(f"""
+set(CMAKE_SYSROOT {toolchain.sysroot})
+
+set(CMAKE_FIND_ROOT_PATH {toolchain.install_prefix} ${{CMAKE_SYSROOT}})
+set(CMAKE_FIND_ROOT_PATH_MODE_PROGRAM NEVER)
+set(CMAKE_FIND_ROOT_PATH_MODE_LIBRARY ONLY)
+set(CMAKE_FIND_ROOT_PATH_MODE_INCLUDE ONLY)
+set(CMAKE_FIND_ROOT_PATH_MODE_PACKAGE ONLY)
+""")
 
 def configure(toolchain: AnyToolchain, src: str, build: str, args: list[str]=[], env: Optional[Mapping[str, str]]=None) -> None:
     cross_args: list[str] = []

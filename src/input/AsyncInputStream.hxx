@@ -56,6 +56,14 @@ class AsyncInputStream : public InputStream {
 protected:
 	std::exception_ptr postponed_exception;
 
+	/**
+	 * Notify both the synchronous caller and the InputStream handler.
+	 */
+	void InvokeOnAvailable() noexcept {
+		caller_cond.notify_one();
+		InputStream::InvokeOnAvailable();
+	}
+
 public:
 	AsyncInputStream(EventLoop &event_loop, std::string_view _url,
 			 Mutex &_mutex,

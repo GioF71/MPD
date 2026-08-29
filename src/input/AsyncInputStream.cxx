@@ -141,7 +141,6 @@ AsyncInputStream::SeekDone() noexcept
 	open = true;
 
 	seek_state = SeekState::NONE;
-	caller_cond.notify_one();
 	InvokeOnAvailable();
 }
 
@@ -207,10 +206,8 @@ AsyncInputStream::CommitWriteBuffer(size_t nbytes) noexcept
 
 	if (!IsReady())
 		SetReady();
-	else {
-		caller_cond.notify_one();
+	else
 		InvokeOnAvailable();
-	}
 }
 
 void
@@ -240,10 +237,8 @@ AsyncInputStream::AppendToBuffer(std::span<const std::byte> src) noexcept
 
 	if (!IsReady())
 		SetReady();
-	else {
-		caller_cond.notify_one();
+	else
 		InvokeOnAvailable();
-	}
 }
 
 void
@@ -254,7 +249,6 @@ AsyncInputStream::DeferredResume() noexcept
 	if (postponed_exception) [[unlikely]] {
 		/* do not proceed, first the caller must handle the
                    pending error */
-		caller_cond.notify_one();
 		InvokeOnAvailable();
 		return;
 	}
@@ -263,7 +257,6 @@ AsyncInputStream::DeferredResume() noexcept
 		Resume();
 	} catch (...) {
 		postponed_exception = std::current_exception();
-		caller_cond.notify_one();
 		InvokeOnAvailable();
 	}
 }
@@ -279,7 +272,6 @@ AsyncInputStream::DeferredSeek() noexcept
 		/* do not proceed, first the caller must handle the
                    pending error */
 		seek_state = SeekState::NONE;
-		caller_cond.notify_one();
 		InvokeOnAvailable();
 		return;
 	}
@@ -295,7 +287,6 @@ AsyncInputStream::DeferredSeek() noexcept
 	} catch (...) {
 		seek_state = SeekState::NONE;
 		postponed_exception = std::current_exception();
-		caller_cond.notify_one();
 		InvokeOnAvailable();
 	}
 }

@@ -84,7 +84,12 @@ public:
 			   ? sticker_database.Delete(sticker_type, uri)
 			   : sticker_database.DeleteValue(sticker_type, uri, name);
 		if (!ret) {
-			response.FmtError(ACK_ERROR_NO_EXIST, "no such sticker: {:?}", name);
+			if (name == nullptr)
+				response.FmtError(ACK_ERROR_NO_EXIST,
+						  "no stickers found: {:?}", uri);
+			else
+				response.FmtError(ACK_ERROR_NO_EXIST,
+						  "no such sticker: {:?}", name);
 			return CommandResult::ERROR;
 		}
 
@@ -519,7 +524,12 @@ handle_sticker(Client &client, Request args, Response &r)
 			args.pop_back();
 		}
 
-		bool has_op = args.size() > 4;
+		if (args.size() != 4 && args.size() != 6) {
+			r.Error(ACK_ERROR_ARG, "bad request");
+			return CommandResult::ERROR;
+		}
+
+		const bool has_op = args.size() == 6;
 		auto value = has_op ? args[5] : nullptr;
 		StickerOperator op = StickerOperator::EXISTS;
 		if (has_op) {

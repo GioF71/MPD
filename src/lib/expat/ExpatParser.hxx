@@ -3,8 +3,11 @@
 
 #pragma once
 
+#include "input/Offset.hxx"
+
 #include <expat.h>
 
+#include <cstddef>
 #include <stdexcept>
 #include <string_view>
 #include <utility>
@@ -60,7 +63,7 @@ public:
 		Parse({}, true);
 	}
 
-	void Parse(InputStream &is);
+	void Parse(InputStream &is, offset_type max_size);
 
 	[[gnu::pure]]
 	static const char *GetAttribute(const XML_Char **atts,

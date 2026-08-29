@@ -1,3 +1,16 @@
+ver 0.24.15 (2026/08/27)
+* protocol
+  - fix crash on "sticker delete" and "sticker find"
+* database
+  - upnp: fix crash bug
+* input
+  - alsa, curl, nfs: fix stalled transfers
+* playlist
+  - asx, pls, rss, xspf: limit to 16 MB
+  - cue: fix problem playing CUE tracks in music directory root
+* player
+  - fix noise with replay gain and cross-fade
+
 ver 0.24.14 (2026/08/13)
 * storage
   - curl: bound WebDAV PROPFIND responses

@@ -2,6 +2,7 @@
 // Copyright The Music Player Daemon Project
 
 #include "XspfPlaylistPlugin.hxx"
+#include "XmlPlaylistPlugin.hxx"
 #include "../PlaylistPlugin.hxx"
 #include "../MemorySongEnumerator.hxx"
 #include "protocol/Verify.hxx"
@@ -189,7 +190,7 @@ xspf_open_stream(InputStreamPtr &&is)
 		ExpatParser expat(&parser);
 		expat.SetElementHandler(xspf_start_element, xspf_end_element);
 		expat.SetCharacterDataHandler(xspf_char_data);
-		expat.Parse(*is);
+		expat.Parse(*is, XML_PLAYLIST_MAX_SIZE);
 	}
 
 	parser.songs.reverse();
